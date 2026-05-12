@@ -8,9 +8,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ================= CONFIGURATION =================
 BOT_TOKEN = "8797483939:AAE2LJ1sy1k1_4BOhelrcOcMaJtiR_o0xXY"
-EXTERNAL_API_URL = "https://all-number-info-rajan-eta.vercel.app/api"
+EXTERNAL_API_URL = "https://email-info-rajan-mauve.vercel.app/api?num="
 ADMIN_PASSWORD = "#shashikumar"
-DEVELOPER_USERNAME = "@KINGITACHI18"  # Your username in help
+DEVELOPER_USERNAME = "@KINGITACHI18"
 # =================================================
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -87,7 +87,7 @@ def is_admin(chat_id):
 # ============ API CALL ============
 def call_api(mobile_number):
     try:
-        url = f"{EXTERNAL_API_URL}?number={mobile_number}"
+        url = f"{EXTERNAL_API_URL}{mobile_number}"
         print(f"📡 API: {url}")
         resp = requests.get(url, timeout=20)
         if resp.status_code == 200:
@@ -95,6 +95,85 @@ def call_api(mobile_number):
         return {"error": f"HTTP {resp.status_code}"}
     except Exception as e:
         return {"error": str(e)[:50]}
+
+# ============ BOX STYLE FORMAT RESULT ============
+def format_result(data, number):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    records = data.get("data", [])
+    if not records:
+        return f"❌ No information found for +91 {number}"
+    
+    first = records[0]
+    
+    name = first.get('name', 'N/A') or 'N/A'
+    fname = first.get('fname', 'N/A') or 'N/A'
+    aadhaar = first.get('id', 'N/A') or 'N/A'
+    alternate = first.get('alt', 'N/A') or 'N/A'
+    circle = first.get('circle', 'N/A') or 'N/A'
+    email = first.get('email', 'N/A') or 'N/A'
+    if email == '':
+        email = 'N/A'
+    address = first.get('address', 'N/A') or 'N/A'
+    
+    if len(address) > 80:
+        address = address[:77] + '...'
+    
+    result = f"[ 📱 NUMBER INFO   ]  (⁠•⁠‿⁠•⁠)\n\n"
+    result += f"|  🎯 Number: +91 {number}\n\n"
+    result += f"|  👤 Name: {name}\n\n"
+    result += f"|  👨 Father: {fname}\n\n"
+    result += f"|  🆔 Aadhaar: {aadhaar}\n\n"
+    result += f"|  📞 Alternate: {alternate}\n\n"
+    result += f"|  📡 Carrier: {circle}\n\n"
+    result += f"|  📧 Email: {email}\n\n"
+    result += f"|  📍 Address: {address}\n\n"
+    
+    total_records = data.get('count', len(records))
+    if total_records > 1:
+        result += f"|    📚 Total Records: {total_records}\n"
+        result += f"|💡 Use /full {number} to see all\n\n"
+    
+    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    return result
+
+def format_full_result(data, number):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    records = data.get("data", [])
+    if not records:
+        return f"❌ No records found"
+    
+    result = f"[ 📱 FULL DETAILS - +91 {number} ]\n\n"
+    result += f"|  ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    
+    for i, rec in enumerate(records[:15], 1):
+        name = rec.get('name', 'N/A') or 'N/A'
+        fname = rec.get('fname', 'N/A') or 'N/A'
+        aadhaar = rec.get('id', 'N/A') or 'N/A'
+        alternate = rec.get('alt', 'N/A') or 'N/A'
+        circle = rec.get('circle', 'N/A') or 'N/A'
+        email = rec.get('email', 'N/A') or 'N/A'
+        if email == '':
+            email = 'N/A'
+        address = rec.get('address', 'N/A') or 'N/A'
+        
+        if len(address) > 70:
+            address = address[:67] + '...'
+        
+        result += f"|  ▶ Record {i}\n"
+        result += f"|     👤 Name: {name}\n"
+        result += f"|     👨 Father: {fname}\n"
+        result += f"|     🆔 Aadhaar: {aadhaar}\n"
+        result += f"|     📞 Alternate: {alternate}\n"
+        result += f"|     📡 Carrier: {circle}\n"
+        result += f"|     📧 Email: {email}\n"
+        result += f"|     📍 Address: {address}\n\n"
+    
+    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    return result
 
 # ============ TRENDING NUMBERS ============
 def update_trending(number):
@@ -109,25 +188,55 @@ def get_trending():
     if not sorted_trending:
         return "📊 No trending data yet!"
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         🔥 TRENDING NUMBERS\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg = "🔥 TRENDING NUMBERS\n\n"
     for i, (num, count) in enumerate(sorted_trending, 1):
-        msg += f"{i}. <code>{num}</code>\n"
-        msg += f"   🔍 Searched: {count} times\n\n"
+        msg += f"{i}. <code>{num}</code> - {count} searches\n"
     return msg
 
-# ============ USER FUNCTIONS ============
-def update_stats(chat_id, name, number=None):
+# ============ USER FUNCTIONS - FIXED FOR ANY SITUATION ============
+def get_display_name(user_info):
+    """Smart display name - works with or without username"""
+    first_name = user_info.get("first_name", "")
+    last_name = user_info.get("last_name", "")
+    username = user_info.get("username", "")
+    
+    # Build full name
+    if first_name and last_name:
+        full_name = f"{first_name} {last_name}"
+    elif first_name:
+        full_name = first_name
+    elif username:
+        full_name = username  # Use username as name if no name set
+    else:
+        full_name = f"User_{user_info.get('id', 'unknown')[:6]}"
+    
+    # Add username prefix if username exists and is different from name
+    if username and username not in full_name:
+        return f"{full_name} (@{username})"
+    return full_name
+
+def update_stats(chat_id, user_info, number=None):
     cid = str(chat_id)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # Extract user details
+    first_name = user_info.get("first_name", "")
+    last_name = user_info.get("last_name", "")
+    username = user_info.get("username", "")
+    
+    # Debug print
+    print(f"📝 User: {first_name} (@{username if username else 'no_username'}) - ID: {cid}")
+    
     if cid not in user_data:
         user_data[cid] = {
-            "name": name,
+            "first_name": first_name,
+            "last_name": last_name,
+            "username": username if username else "",
+            "display_name": get_display_name(user_info),
             "searches": [],
             "joined": now
         }
+        print(f"✅ New user registered: {user_data[cid]['display_name']}")
     
     if number:
         user_data[cid]["searches"].append({
@@ -144,14 +253,9 @@ def get_user_history(chat_id):
     if cid not in user_data or not user_data[cid].get("searches"):
         return "📜 No search history yet!\n\nPress 📱 Phone Lookup to start."
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         📜 YOUR SEARCH HISTORY\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+    msg = "📜 YOUR SEARCH HISTORY\n\n"
     for i, search in enumerate(user_data[cid]["searches"][-20:][::-1], 1):
-        msg += f"{i}. <code>{search['number']}</code>\n"
-        msg += f"   🕐 {search['time']}\n\n"
-    
+        msg += f"{i}. <code>{search['number']}</code> - {search['time']}\n"
     return msg
 
 def export_history(chat_id):
@@ -160,7 +264,7 @@ def export_history(chat_id):
         return "❌ No history to export!"
     
     export_data = {
-        "user": user_data[cid]["name"],
+        "user": user_data[cid].get("display_name", "Unknown"),
         "user_id": chat_id,
         "export_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total_searches": len(user_data[cid]["searches"]),
@@ -179,14 +283,11 @@ def show_dashboard(chat_id):
     total_users = len(user_data)
     total_searches = sum(len(u.get("searches", [])) for u in user_data.values())
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         📊 ADMIN DASHBOARD\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    msg = f"📊 ADMIN DASHBOARD\n\n"
     msg += f"👥 Total Users: {total_users}\n"
     msg += f"🔍 Total Searches: {total_searches}\n"
     msg += f"📊 Trending Numbers: {len(trending_numbers)}\n"
-    msg += f"\n🕐 {datetime.now().strftime('%d %B %Y, %I:%M %p')}\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    msg += f"\n🕐 {datetime.now().strftime('%d %B %Y, %I:%M %p')}"
     send_msg(chat_id, msg, ADMIN_KEYBOARD)
 
 def show_users(chat_id):
@@ -194,18 +295,26 @@ def show_users(chat_id):
         send_msg(chat_id, "❌ No users found!")
         return
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         👥 USER LIST\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+    msg = "👥 USER LIST\n\n"
     for i, (cid, data) in enumerate(user_data.items(), 1):
         searches = len(data.get("searches", []))
-        msg += f"{i}. {data.get('name', 'Unknown')[:20]}\n"
-        msg += f"   🆔 <code>{cid}</code>\n"
-        msg += f"   🔍 {searches} searches\n"
+        
+        # Get best display name
+        if data.get('display_name'):
+            display = data['display_name']
+        elif data.get('username'):
+            display = f"User (@{data['username']})"
+        elif data.get('first_name'):
+            display = data['first_name']
+        else:
+            display = f"User_{cid[:6]}"
+        
+        msg += f"{i}. {display}\n"
+        msg += f"   🆔 ID: <code>{cid}</code>\n"
+        msg += f"   🔍 Searches: {searches}\n"
         msg += f"   🕐 Last: {data.get('last_active', 'Unknown')[:16]}\n\n"
         if i >= 15:
-            msg += "Showing first 15 users\n"
+            msg += "📌 Showing first 15 users\n"
             break
     
     send_msg(chat_id, msg)
@@ -214,8 +323,16 @@ def show_all_history(chat_id):
     all_searches = []
     for cid, data in user_data.items():
         for s in data.get("searches", []):
+            # Get best display name
+            if data.get('display_name'):
+                user_display = data['display_name']
+            elif data.get('username'):
+                user_display = data['username']
+            else:
+                user_display = data.get('first_name', f"User_{cid[:6]}")
+            
             all_searches.append({
-                "user": data.get("name", "Unknown"),
+                "user": user_display,
                 "user_id": cid,
                 "number": s.get("number"),
                 "time": s.get("time", "")[:16]
@@ -225,10 +342,7 @@ def show_all_history(chat_id):
         send_msg(chat_id, "❌ No search logs!")
         return
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         📜 ALL SEARCH HISTORY\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+    msg = "📜 ALL SEARCH HISTORY\n\n"
     for i, s in enumerate(all_searches[-30:][::-1], 1):
         msg += f"{i}. {s['user']}\n"
         msg += f"   📞 {s['number']}\n"
@@ -243,20 +357,24 @@ def show_top_users(chat_id):
     
     user_stats = []
     for cid, data in user_data.items():
+        if data.get('display_name'):
+            name = data['display_name']
+        elif data.get('username'):
+            name = data['username']
+        else:
+            name = data.get('first_name', f"User_{cid[:6]}")
+        
         user_stats.append({
-            "name": data.get("name", "Unknown"),
+            "name": name,
             "searches": len(data.get("searches", []))
         })
     
     user_stats.sort(key=lambda x: x["searches"], reverse=True)
     
-    msg = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += "         🏆 TOP USERS\n"
-    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+    msg = "🏆 TOP USERS\n\n"
     for i, u in enumerate(user_stats[:10], 1):
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📌"
-        msg += f"{medal} {i}. {u['name'][:20]}\n"
+        msg += f"{medal} {i}. {u['name'][:30]}\n"
         msg += f"   🔍 {u['searches']} searches\n\n"
     
     send_msg(chat_id, msg)
@@ -268,7 +386,7 @@ def remove_user(chat_id, target_id):
         return
     
     if target in user_data:
-        name = user_data[target].get("name", "Unknown")
+        name = user_data[target].get("display_name", user_data[target].get("first_name", "Unknown"))
         del user_data[target]
         save_data()
         send_msg(chat_id, f"✅ Removed user '{name}'!", ADMIN_KEYBOARD)
@@ -300,10 +418,13 @@ def handle_update(update):
     msg = update["message"]
     chat_id = msg["chat"]["id"]
     text = msg.get("text", "")
-    name = msg["chat"].get("first_name", "User")
+    user_info = msg["chat"]
     
-    print(f"📨 {name}: {text[:50]}")
-    update_stats(chat_id, name)
+    # Debug print
+    print(f"📨 {user_info.get('first_name', 'Unknown')} | Username: @{user_info.get('username', 'NOT_SET')} | ID: {chat_id}")
+    
+    # Update stats with full user info
+    update_stats(chat_id, user_info)
     
     admin = is_admin(chat_id)
     
@@ -352,25 +473,23 @@ def handle_update(update):
     
     # Admin login
     if text.lower() == "/admin":
-        send_msg(chat_id, "🔐 Send admin password:")
+        send_msg(chat_id, "🔐 Enter admin password:")
         return
     if text == ADMIN_PASSWORD:
         admin_session[str(chat_id)] = {}
-        send_msg(chat_id, "✅ Admin login successful!", ADMIN_KEYBOARD)
+        send_msg(chat_id, "✅ Admin access granted!", ADMIN_KEYBOARD)
         return
     
     # User commands
     if text == "/start":
-        welcome = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        welcome += f"     🎉 WELCOME {name.upper()}! 🎉\n"
-        welcome += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        display = get_display_name(user_info)
+        welcome = f"🎉 WELCOME {display}! 🎉\n\n"
         welcome += f"📱 <b>NUMBER INFO BOT</b>\n\n"
         welcome += f"✨ <b>Features:</b>\n"
         welcome += f"• 🔍 Lookup any 10-digit number\n"
         welcome += f"• 📜 View your search history\n"
         welcome += f"• 📊 See trending numbers\n\n"
-        welcome += f"Press buttons below to get started!\n"
-        welcome += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        welcome += f"Press buttons below to get started!"
         send_msg(chat_id, welcome, USER_KEYBOARD)
         return
     
@@ -387,20 +506,15 @@ def handle_update(update):
         return
     
     if text == "ℹ️ Help":
-        help_msg = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        help_msg += f"         📚 HELP & COMMANDS\n"
-        help_msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        help_msg += f"🔍 <b>Basic Commands:</b>\n"
-        help_msg += f"• Send any 10-digit number - Lookup info\n"
-        help_msg += f"• /start - Restart bot\n\n"
-        help_msg += f"📜 <b>History:</b>\n"
-        help_msg += f"• 📜 My History - View your searches\n"
-        help_msg += f"• /export - Export your history as JSON\n\n"
-        help_msg += f"📊 <b>Other:</b>\n"
-        help_msg += f"• 📊 Trending - Most searched numbers\n\n"
-        help_msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        help_msg += f"👨‍💻 Developer: {DEVELOPER_USERNAME}\n"
-        help_msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        help_msg = f"📚 HELP & COMMANDS\n\n"
+        help_msg += f"🔍 Send any 10-digit number\n"
+        help_msg += f"   Example: 9876543210\n\n"
+        help_msg += f"📋 Commands:\n"
+        help_msg += f"   /start - Restart bot\n"
+        help_msg += f"   /help - Show this help\n"
+        help_msg += f"   /stats - Your usage stats\n"
+        help_msg += f"   /full [number] - All records\n\n"
+        help_msg += f"👨‍💻 Developer: {DEVELOPER_USERNAME}"
         send_msg(chat_id, help_msg)
         return
     
@@ -411,23 +525,24 @@ def handle_update(update):
     
     # Phone number lookup
     if text.isdigit() and len(text) == 10:
+        update_stats(chat_id, user_info, text)
         send_msg(chat_id, f"🔍 Searching for {text}...")
         api_data = call_api(text)
-        json_response = json.dumps(api_data, indent=2, ensure_ascii=False)
-        
-        if len(json_response) > 4000:
-            parts = [json_response[i:i+4000] for i in range(0, len(json_response), 4000)]
-            for part in parts:
-                send_msg(chat_id, f"<pre>{part}</pre>")
+        send_msg(chat_id, format_result(api_data, text))
+        return
+    
+    if text.startswith("/full "):
+        num = text.replace("/full ", "").strip()
+        if num.isdigit() and len(num) == 10:
+            api_data = call_api(num)
+            send_msg(chat_id, format_full_result(api_data, num))
         else:
-            send_msg(chat_id, f"<pre>{json_response}</pre>")
-        
-        update_stats(chat_id, name, text)
+            send_msg(chat_id, "❌ Invalid! Use: /full 1234567890")
         return
     
     # Invalid
     if text and text not in ["/start", "/admin", ADMIN_PASSWORD]:
-        send_msg(chat_id, "❌ Invalid! Send 10-digit number or use buttons\n\nType /help for commands")
+        send_msg(chat_id, "❌ Invalid! Send 10-digit number or use buttons")
 
 # ============ MAIN ============
 def main():
@@ -440,6 +555,9 @@ def main():
     print(f"🔐 Admin Password: {ADMIN_PASSWORD}")
     print(f"🌐 API: {EXTERNAL_API_URL}")
     print(f"👥 Loaded users: {len(user_data)}")
+    print("=" * 60)
+    print("\n💡 NOTE: Username tabhi show hoga jab user ne Telegram mein username set kiya ho!")
+    print("💡 Agar username nahi set hai toh sirf name dikhega.")
     print("=" * 60)
     
     global OFFSET
