@@ -84,15 +84,40 @@ def send_msg(chat_id, text, reply_markup=None, parse_mode="HTML"):
 def is_admin(chat_id):
     return str(chat_id) in admin_session
 
-# ============ API CALL ============
+# ============ API CALL - FIXED PARSING ============
 def call_api(mobile_number):
     try:
-        url = f"{EXTERNAL_API_URL}{mobile_number}"
-        print(f"📡 API: {url}")
-        resp = requests.get(url, timeout=20)
-        if resp.status_code == 200:
-            return resp.json()
-        return {"error": f"HTTP {resp.status_code}"}
+        # Clean number - keep only digits
+        clean_number = ''.join(filter(str.isdigit, mobile_number))
+        
+        # If number starts with 91 and length is 12, remove first 2 digits
+        if clean_number.startswith('91') and len(clean_number) == 12:
+            clean_number = clean_number[2:]
+        
+        if len(clean_number) == 10:
+            url = f"{EXTERNAL_API_URL}{clean_number}"
+            print(f"📡 API Call: {url}")
+            
+            resp = requests.get(url, timeout=20)
+            print(f"📡 Response Status: {resp.status_code}")
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"📡 Response Data: {json.dumps(data, indent=2)[:200]}")
+                
+                # Check if data exists in response
+                if data.get("status") == "success" and data.get("data"):
+                    return data
+                elif data.get("data") and len(data.get("data", [])) > 0:
+                    return data
+                else:
+                    return {"error": "No data found in API response"}
+            else:
+                return {"error": f"HTTP {resp.status_code}"}
+        else:
+            return {"error": "Invalid number format. Please send 10-digit number."}
+    except requests.exceptions.Timeout:
+        return {"error": "API timeout. Please try again."}
     except Exception as e:
         return {"error": str(e)[:50]}
 
@@ -103,8 +128,9 @@ def format_result(data, number):
     
     records = data.get("data", [])
     if not records:
-        return f"❌ No information found for +91 {number}"
+        return f"❌ No information found for {number}"
     
+    # Get first record (main record)
     first = records[0]
     
     name = first.get('name', 'N/A') or 'N/A'
@@ -121,7 +147,7 @@ def format_result(data, number):
         address = address[:77] + '...'
     
     result = f"[ 📱 NUMBER INFO   ]  (⁠•⁠‿⁠•⁠)\n\n"
-    result += f"|  🎯 Number: +91 {number}\n\n"
+    result += f"|  🎯 Number: {number}\n\n"
     result += f"|  👤 Name: {name}\n\n"
     result += f"|  👨 Father: {fname}\n\n"
     result += f"|  🆔 Aadhaar: {aadhaar}\n\n"
@@ -146,7 +172,7 @@ def format_full_result(data, number):
     if not records:
         return f"❌ No records found"
     
-    result = f"[ 📱 FULL DETAILS - +91 {number} ]\n\n"
+    result = f"[ 📱 FULL DETAILS - {number} ]\n\n"
     result += f"|  ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     
     for i, rec in enumerate(records[:15], 1):
@@ -193,24 +219,21 @@ def get_trending():
         msg += f"{i}. <code>{num}</code> - {count} searches\n"
     return msg
 
-# ============ USER FUNCTIONS - FIXED FOR ANY SITUATION ============
+# ============ USER FUNCTIONS ============
 def get_display_name(user_info):
-    """Smart display name - works with or without username"""
     first_name = user_info.get("first_name", "")
     last_name = user_info.get("last_name", "")
     username = user_info.get("username", "")
     
-    # Build full name
     if first_name and last_name:
         full_name = f"{first_name} {last_name}"
     elif first_name:
         full_name = first_name
     elif username:
-        full_name = username  # Use username as name if no name set
+        full_name = username
     else:
         full_name = f"User_{user_info.get('id', 'unknown')[:6]}"
     
-    # Add username prefix if username exists and is different from name
     if username and username not in full_name:
         return f"{full_name} (@{username})"
     return full_name
@@ -219,12 +242,10 @@ def update_stats(chat_id, user_info, number=None):
     cid = str(chat_id)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Extract user details
     first_name = user_info.get("first_name", "")
     last_name = user_info.get("last_name", "")
     username = user_info.get("username", "")
     
-    # Debug print
     print(f"📝 User: {first_name} (@{username if username else 'no_username'}) - ID: {cid}")
     
     if cid not in user_data:
@@ -299,7 +320,6 @@ def show_users(chat_id):
     for i, (cid, data) in enumerate(user_data.items(), 1):
         searches = len(data.get("searches", []))
         
-        # Get best display name
         if data.get('display_name'):
             display = data['display_name']
         elif data.get('username'):
@@ -323,7 +343,6 @@ def show_all_history(chat_id):
     all_searches = []
     for cid, data in user_data.items():
         for s in data.get("searches", []):
-            # Get best display name
             if data.get('display_name'):
                 user_display = data['display_name']
             elif data.get('username'):
@@ -420,12 +439,9 @@ def handle_update(update):
     text = msg.get("text", "")
     user_info = msg["chat"]
     
-    # Debug print
-    print(f"📨 {user_info.get('first_name', 'Unknown')} | Username: @{user_info.get('username', 'NOT_SET')} | ID: {chat_id}")
+    print(f"📨 {user_info.get('first_name', 'Unknown')} | Text: {text[:50]}")
     
-    # Update stats with full user info
     update_stats(chat_id, user_info)
-    
     admin = is_admin(chat_id)
     
     # Handle remove mode
@@ -528,14 +544,22 @@ def handle_update(update):
         update_stats(chat_id, user_info, text)
         send_msg(chat_id, f"🔍 Searching for {text}...")
         api_data = call_api(text)
-        send_msg(chat_id, format_result(api_data, text))
+        
+        # Check if data found
+        if api_data.get("error") or not api_data.get("data"):
+            send_msg(chat_id, f"❌ No information found for {text}\n\n⚠️ Please try again in a few seconds.")
+        else:
+            send_msg(chat_id, format_result(api_data, text))
         return
     
     if text.startswith("/full "):
         num = text.replace("/full ", "").strip()
         if num.isdigit() and len(num) == 10:
             api_data = call_api(num)
-            send_msg(chat_id, format_full_result(api_data, num))
+            if api_data.get("error") or not api_data.get("data"):
+                send_msg(chat_id, f"❌ No information found for {num}")
+            else:
+                send_msg(chat_id, format_full_result(api_data, num))
         else:
             send_msg(chat_id, "❌ Invalid! Use: /full 1234567890")
         return
@@ -555,9 +579,6 @@ def main():
     print(f"🔐 Admin Password: {ADMIN_PASSWORD}")
     print(f"🌐 API: {EXTERNAL_API_URL}")
     print(f"👥 Loaded users: {len(user_data)}")
-    print("=" * 60)
-    print("\n💡 NOTE: Username tabhi show hoga jab user ne Telegram mein username set kiya ho!")
-    print("💡 Agar username nahi set hai toh sirf name dikhega.")
     print("=" * 60)
     
     global OFFSET
