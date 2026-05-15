@@ -7,13 +7,11 @@ from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ================= CONFIGURATION =================
-# ⚠️ TOKEN REVOKE KARKE NAYA LAGANA (IMPORTANT!)
-BOT_TOKEN = "8797483939:AAGigJaKMxNAwtItpDPxYo7OOuIztGDJujU"  # Naya token daalo
+BOT_TOKEN = "8797483939:AAGigJaKMxNAwtItpDPxYo7OOuIztGDJujU"
 ADMIN_PASSWORD = "#shashikumar"
 DEVELOPER_USERNAME = "@KINGITACHI18"
 
 # APIs
-NUMBER_API = "https://email-info-rajan-mauve.vercel.app/api?num="
 UNIVERSAL_API = "https://all-sigma-pad-api-damo-5-day.vercel.app/api"
 API_KEY = "RAJAN123"
 # =================================================
@@ -29,12 +27,14 @@ waiting_for_input = {}
 # ============ KEYBOARDS ============
 USER_KEYBOARD = {
     "keyboard": [
-        [{"text": "📞 Number Lookup"}, {"text": "🆔 Aadhaar Lookup"}],
+        [{"text": "📞 Number Lookup"}, {"text": "🪪 Ration Card"}],
         [{"text": "📧 Email Lookup"}, {"text": "🚗 Vehicle Lookup"}],
-        [{"text": "📱 TG to Number"}],
+        [{"text": "🌐 IP Lookup"}, {"text": "🏦 IFSC Lookup"}],
+        [{"text": "📦 GST Lookup"}, {"text": "📱 TG to Number"}],
         [{"text": "ℹ️ Help"}]
     ],
-    "resize_keyboard": True
+    "resize_keyboard": True,
+    "is_persistent": True
 }
 
 ADMIN_KEYBOARD = {
@@ -62,6 +62,7 @@ def run_health_server():
 # ============ SEND MESSAGE ============
 def send_msg(chat_id, text, reply_markup=None, parse_mode="HTML"):
     url = f"{BASE_URL}/sendMessage"
+    
     try:
         chat_id = int(chat_id)
     except:
@@ -70,7 +71,8 @@ def send_msg(chat_id, text, reply_markup=None, parse_mode="HTML"):
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": parse_mode
+        "parse_mode": parse_mode,
+        "allow_sending_without_reply": True
     }
     if reply_markup:
         payload["reply_markup"] = json.dumps(reply_markup)
@@ -170,25 +172,11 @@ def update_stats(chat_id, user_info, search_type=None, search_term=None):
     
     save_data()
 
-# ============ API CALLS ============
-def call_number_api(number):
-    try:
-        clean = ''.join(filter(str.isdigit, number))
-        if len(clean) == 10:
-            url = f"{NUMBER_API}{clean}"
-            print(f"📡 Number API: {url}")
-            resp = requests.get(url, timeout=20)
-            if resp.status_code == 200:
-                return resp.json()
-            return {"error": f"HTTP {resp.status_code}"}
-        return {"error": "Send 10-digit number"}
-    except Exception as e:
-        return {"error": str(e)[:50]}
-
+# ============ UNIVERSAL API CALL ============
 def call_universal_api(api_type, term):
     try:
         url = f"{UNIVERSAL_API}?key={API_KEY}&type={api_type}&term={term}"
-        print(f"📡 Universal API: {url}")
+        print(f"📡 API Call: {url}")
         resp = requests.get(url, timeout=20)
         if resp.status_code == 200:
             return resp.json()
@@ -201,250 +189,340 @@ def format_number_result(data, number):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    records = data.get("data", [])
-    if not records:
+    results = []
+    if data.get("data", {}).get("success"):
+        results = data["data"].get("result", {}).get("results", [])
+    elif isinstance(data.get("data"), list):
+        results = data["data"]
+    
+    if not results:
         return f"❌ No information found for {number}"
     
-    first = records[0]
+    first = results[0]
     
-    result = f"[ 📱 NUMBER INFO   ]  (⁠•⁠‿⁠•⁠)\n\n"
-    result += f"|  🎯 Number: {number}\n\n"
-    result += f"|  👤 Name: {first.get('name', 'N/A')}\n\n"
-    result += f"|  👨 Father: {first.get('fname', 'N/A')}\n\n"
-    result += f"|  🆔 Aadhaar: {first.get('id', 'N/A')}\n\n"
-    result += f"|  📞 Alternate: {first.get('alt', 'N/A')}\n\n"
-    result += f"|  📡 Carrier: {first.get('circle', 'N/A')}\n\n"
-    result += f"|  📧 Email: {first.get('email', 'N/A') or 'N/A'}\n\n"
+    result = f"📞 NUMBER INFO\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Number: {number}\n\n"
+    result += f"👤 Name: {first.get('NAME', first.get('name', 'N/A'))}\n\n"
+    result += f"👨 Father: {first.get('fname', 'N/A')}\n\n"
+    result += f"🆔 Aadhaar: {first.get('id', 'N/A')}\n\n"
+    result += f"📞 Alternate: {first.get('alt', 'N/A')}\n\n"
+    result += f"📡 Carrier: {first.get('circle', 'N/A')}\n\n"
+    result += f"📧 Email: {first.get('email', 'N/A') or 'N/A'}\n\n"
     
-    address = first.get('address', 'N/A') or 'N/A'
+    address = first.get('ADDRESS', first.get('address', 'N/A')) or 'N/A'
     if len(address) > 80:
         address = address[:77] + '...'
-    result += f"|  📍 Address: {address}\n\n"
+    result += f"📍 Address: {address}\n\n"
     
-    total = data.get('count', len(records))
+    total = len(results)
     if total > 1:
-        result += f"|    📚 Total Records: {total}\n"
-        result += f"|💡 Use /full {number} to see all\n\n"
+        result += f"📚 Total Records: {total}\n"
+        result += f"💡 Use /full {number} to see all\n\n"
     
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    result += f"⚡ POWERED BY MOD X PATEL"
     return result
 
-def format_full_number_result(data, number):
+def format_ration_result(data, term):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    records = data.get("data", [])
-    if not records:
-        return f"❌ No records found for {number}"
-    
-    total = len(records)
-    result = f"[ 📱 FULL DETAILS - {number} ]\n\n"
-    result += f"|  📊 Total Records: {total}\n"
-    result += f"|  ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    
-    show_count = min(20, total)
-    for i in range(show_count):
-        rec = records[i]
-        result += f"|  ▶ Record {i+1}\n"
-        result += f"|     👤 Name: {rec.get('name', 'N/A')}\n"
-        result += f"|     👨 Father: {rec.get('fname', 'N/A')}\n"
-        result += f"|     🆔 Aadhaar: {rec.get('id', 'N/A')}\n"
-        result += f"|     📞 Alternate: {rec.get('alt', 'N/A')}\n"
-        result += f"|     📡 Carrier: {rec.get('circle', 'N/A')}\n"
-        result += f"|     📧 Email: {rec.get('email', 'N/A') or 'N/A'}\n"
-        
-        address = rec.get('address', 'N/A') or 'N/A'
-        if len(address) > 60:
-            address = address[:57] + '...'
-        result += f"|     📍 Address: {address}\n\n"
-    
-    if total > 20:
-        result += f"|  ⚠️ Showing first 20 of {total} records\n"
-    
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
-    return result
-
-def format_aadhaar_result(data, term):
-    if data.get("error"):
-        return f"❌ Error: {data['error']}"
-    
-    records = data.get("data", {}).get("data", [])
-    if not records:
+    ration_data = data.get("data", {})
+    if not ration_data.get("success"):
         return f"❌ No information found for Aadhaar: {term}"
     
-    total = len(records)
-    result = f"[ 🆔 AADHAAR INFO ]\n\n"
-    result += f"|  🎯 Aadhaar: {term}\n"
-    result += f"|  📊 Total Records: {total}\n\n"
+    details = ration_data.get("details", {})
+    card_info = details.get("card_info", {})
+    members = details.get("members", [])
     
-    show_count = min(5, total)
-    for i in range(show_count):
-        rec = records[i]
-        result += f"|  ▶ Record {i+1}\n"
-        result += f"|     👤 Name: {rec.get('name', 'N/A')}\n"
-        result += f"|     📞 Mobile: {rec.get('mobile', 'N/A')}\n"
-        result += f"|     📞 Alt: {rec.get('alt', 'N/A')}\n"
-        result += f"|     📧 Email: {rec.get('email', 'N/A') or 'N/A'}\n"
-        result += f"|     📡 Carrier: {rec.get('circle', 'N/A')}\n"
-        address = rec.get('address', 'N/A') or 'N/A'
-        if len(address) > 60:
-            address = address[:57] + '...'
-        result += f"|     📍 Address: {address}\n\n"
+    result = f"🪪 RATION CARD INFO\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Aadhaar: {term}\n\n"
+    result += f"📇 Card ID: {ration_data.get('ration_card_id', 'N/A')}\n\n"
+    result += f"📋 Card Type: {card_info.get('Card Type', 'N/A')}\n\n"
+    result += f"📍 Address: {card_info.get('Address', 'N/A')}\n\n"
+    result += f"🏠 District: {card_info.get('District', 'N/A')}\n\n"
+    result += f"🗺️ State: {card_info.get('State', 'N/A')}\n\n"
+    result += f"📅 Issue Date: {card_info.get('Issue Date', 'N/A')}\n\n"
+    result += f"🏪 FPS: {card_info.get('Home FPS', 'N/A')}\n\n"
+    result += f"📊 Scheme: {card_info.get('Scheme', 'N/A')}\n\n"
     
-    if total > 5:
-        result += f"|  ⚠️ Showing first 5 of {total} records\n"
-        result += f"|💡 Use /full {term} to see all records\n\n"
+    if members:
+        result += f"👥 FAMILY MEMBERS ({len(members)})\n"
+        result += f"━━━━━━━━━━━━━━━━━━\n"
+        for i, member in enumerate(members[:5], 1):
+            result += f"\n{i}. 👤 {member.get('member_name', 'N/A').upper()}\n"
+            result += f"   👨‍👧 Relation: {member.get('relationship', 'N/A')}\n"
+            result += f"   🔞 Gender: {member.get('gender', 'N/A')}\n"
+            result += f"   🆔 UID: {member.get('uid_masked', 'N/A')}\n"
     
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    result += f"\n⚡ POWERED BY MOD X PATEL"
     return result
 
-def format_full_aadhaar_result(data, term):
+def format_ip_result(data, term):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    records = data.get("data", {}).get("data", [])
-    if not records:
-        return f"❌ No records found for Aadhaar: {term}"
+    ip_data = data.get("data", {}).get("result", {})
+    if not ip_data:
+        return f"❌ No information found for IP: {term}"
     
-    total = len(records)
-    result = f"[ 🆔 FULL AADHAAR DETAILS ]\n\n"
-    result += f"|  🎯 Aadhaar: {term}\n"
-    result += f"|  📊 Total Records: {total}\n"
-    result += f"|  ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    result = f"🌐 IP INFORMATION\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 IP: {ip_data.get('IP', term)}\n\n"
+    result += f"📍 Location: {ip_data.get('City', 'N/A')}, {ip_data.get('Region', 'N/A')}\n"
+    result += f"🌍 Country: {ip_data.get('Country', 'N/A')} {ip_data.get('Flag_Emoji', '')}\n"
+    result += f"📮 Postal: {ip_data.get('Postal', 'N/A')}\n\n"
+    result += f"🏢 ISP: {ip_data.get('ISP', 'N/A')}\n"
+    result += f"🏢 Organization: {ip_data.get('ORG', 'N/A')}\n"
+    result += f"🆔 ASN: {ip_data.get('ASN', 'N/A')}\n\n"
+    result += f"🌐 Domain: {ip_data.get('Domain', 'N/A')}\n"
+    result += f"📡 Type: {ip_data.get('Type', 'N/A')}\n\n"
+    result += f"🗺️ Coordinates: {ip_data.get('Location', 'N/A')}\n"
+    result += f"⏰ Timezone: {ip_data.get('Timezone', 'N/A')} (UTC{ip_data.get('Timezone_Offset', 'N/A')})\n"
     
-    show_count = min(20, total)
-    for i in range(show_count):
-        rec = records[i]
-        result += f"|  ▶ Record {i+1}\n"
-        result += f"|     👤 Name: {rec.get('name', 'N/A')}\n"
-        result += f"|     📞 Mobile: {rec.get('mobile', 'N/A')}\n"
-        result += f"|     📞 Alt: {rec.get('alt', 'N/A')}\n"
-        result += f"|     📧 Email: {rec.get('email', 'N/A') or 'N/A'}\n"
-        result += f"|     📡 Carrier: {rec.get('circle', 'N/A')}\n"
-        address = rec.get('address', 'N/A') or 'N/A'
-        if len(address) > 60:
-            address = address[:57] + '...'
-        result += f"|     📍 Address: {address}\n\n"
+    result += f"\n⚡ POWERED BY MOD X PATEL"
+    return result
+
+def format_ifsc_result(data, term):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
     
-    if total > 20:
-        result += f"|  ⚠️ Showing first 20 of {total} records\n"
+    bank_data = data.get("data", {}).get("result", {})
+    if not bank_data:
+        return f"❌ No information found for IFSC: {term}"
     
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    result = f"🏦 BANK IFSC INFORMATION\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 IFSC: {bank_data.get('IFSC', term)}\n\n"
+    result += f"🏛️ Bank: {bank_data.get('BANK', 'N/A')}\n"
+    result += f"🏢 Branch: {bank_data.get('BRANCH', 'N/A')}\n"
+    result += f"🏙️ City: {bank_data.get('CITY', 'N/A')}\n"
+    result += f"📍 District: {bank_data.get('DISTRICT', 'N/A')}\n"
+    result += f"🗺️ State: {bank_data.get('STATE', 'N/A')}\n\n"
+    result += f"📬 Address: {bank_data.get('ADDRESS', 'N/A')}\n\n"
+    result += f"📞 Contact: {bank_data.get('CONTACT', 'N/A')}\n\n"
+    result += f"💳 Services:\n"
+    result += f"   • NEFT: {'✅' if bank_data.get('NEFT') else '❌'}\n"
+    result += f"   • RTGS: {'✅' if bank_data.get('RTGS') else '❌'}\n"
+    result += f"   • IMPS: {'✅' if bank_data.get('IMPS') else '❌'}\n"
+    result += f"   • UPI: {'✅' if bank_data.get('UPI') else '❌'}\n\n"
+    result += f"🔢 MICR: {bank_data.get('MICR', 'N/A')}\n"
+    result += f"🔑 Bank Code: {bank_data.get('BANKCODE', 'N/A')}\n"
+    
+    result += f"\n⚡ POWERED BY MOD X PATEL"
+    return result
+
+def format_gst_result(data, term):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    gst_data = data.get("data", {}).get("result", {}).get("data", {})
+    if not gst_data:
+        return f"❌ No information found for GST: {term}"
+    
+    result = f"📦 GST INFORMATION\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 GSTIN: {gst_data.get('Gstin', term)}\n\n"
+    result += f"👤 Legal Name: {gst_data.get('LegalName', 'N/A')}\n"
+    result += f"🏪 Trade Name: {gst_data.get('TradeName', 'N/A')}\n\n"
+    result += f"📅 Registration Date: {gst_data.get('DtReg', 'N/A')}\n"
+    result += f"📊 Status: {gst_data.get('Status', 'N/A')}\n"
+    result += f"🔄 Block Status: {gst_data.get('BlkStatus', 'N/A')}\n"
+    result += f"💰 Taxpayer Type: {gst_data.get('TxpType', 'N/A')}\n\n"
+    result += f"📍 Address: {gst_data.get('AddrLoc', 'N/A')}, {gst_data.get('AddrSt', 'N/A')}\n"
+    result += f"📮 PIN Code: {gst_data.get('AddrPncd', 'N/A')}\n"
+    result += f"🏢 State Code: {gst_data.get('StateCode', 'N/A')}\n"
+    
+    result += f"\n⚡ POWERED BY MOD X PATEL"
     return result
 
 def format_email_result(data, term):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    records = data.get("data", {}).get("data", [])
-    if not records:
+    results = []
+    if data.get("data", {}).get("success"):
+        results = data["data"].get("result", {}).get("results", [])
+    elif isinstance(data.get("data"), list):
+        results = data["data"]
+    
+    if not results:
         return f"❌ No information found for Email: {term}"
     
-    total = len(records)
-    result = f"[ 📧 EMAIL INFO ]\n\n"
-    result += f"|  🎯 Email: {term}\n"
-    result += f"|  📊 Total Records: {total}\n\n"
+    total = len(results)
+    result = f"📧 EMAIL INFO\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Email: {term}\n"
+    result += f"📊 Total Records: {total}\n\n"
     
-    show_count = min(5, total)
-    for i in range(show_count):
-        rec = records[i]
-        result += f"|  ▶ Record {i+1}\n"
-        result += f"|     👤 Name: {rec.get('name', 'N/A')}\n"
-        result += f"|     📞 Mobile: {rec.get('mobile', 'N/A')}\n"
-        result += f"|     📧 Email: {rec.get('email', 'N/A') or 'N/A'}\n"
-        result += f"|     📡 Carrier: {rec.get('circle', 'N/A')}\n"
-        address = rec.get('address', 'N/A') or 'N/A'
+    for i, rec in enumerate(results[:3], 1):
+        result += f"▶ Record {i}\n"
+        result += f"   👤 Name: {rec.get('NAME', rec.get('name', 'N/A'))}\n"
+        result += f"   📞 Mobile: {rec.get('MOBILE', rec.get('mobile', 'N/A'))}\n"
+        result += f"   📞 Alt: {rec.get('alt', 'N/A')}\n"
+        address = rec.get('ADDRESS', rec.get('address', 'N/A')) or 'N/A'
         if len(address) > 60:
             address = address[:57] + '...'
-        result += f"|     📍 Address: {address}\n\n"
+        result += f"   📍 Address: {address}\n\n"
     
-    if total > 5:
-        result += f"|  ⚠️ Showing first 5 of {total} records\n"
-        result += f"|💡 Use /full {term} to see all records\n\n"
+    if total > 3:
+        result += f"⚠️ Showing first 3 of {total} records\n"
     
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
-    return result
-
-def format_full_email_result(data, term):
-    if data.get("error"):
-        return f"❌ Error: {data['error']}"
-    
-    records = data.get("data", {}).get("data", [])
-    if not records:
-        return f"❌ No records found for Email: {term}"
-    
-    total = len(records)
-    result = f"[ 📧 FULL EMAIL DETAILS ]\n\n"
-    result += f"|  🎯 Email: {term}\n"
-    result += f"|  📊 Total Records: {total}\n"
-    result += f"|  ⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-    
-    show_count = min(20, total)
-    for i in range(show_count):
-        rec = records[i]
-        result += f"|  ▶ Record {i+1}\n"
-        result += f"|     👤 Name: {rec.get('name', 'N/A')}\n"
-        result += f"|     📞 Mobile: {rec.get('mobile', 'N/A')}\n"
-        result += f"|     📧 Email: {rec.get('email', 'N/A') or 'N/A'}\n"
-        result += f"|     📡 Carrier: {rec.get('circle', 'N/A')}\n"
-        address = rec.get('address', 'N/A') or 'N/A'
-        if len(address) > 60:
-            address = address[:57] + '...'
-        result += f"|     📍 Address: {address}\n\n"
-    
-    if total > 20:
-        result += f"|  ⚠️ Showing first 20 of {total} records\n"
-    
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    result += f"⚡ POWERED BY MOD X PATEL"
     return result
 
 def format_vehicle_result(data, term):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    if not data.get("success"):
+    vehicle_data = data.get("data", {})
+    if not vehicle_data:
         return f"❌ No information found for vehicle: {term.upper()}"
     
-    vehicle_data = data.get("data", {})
+    result = f"🚗 VEHICLE INFO\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Vehicle: {term.upper()}\n\n"
+    result += f"👤 Owner: {vehicle_data.get('Owner Name', 'N/A')}\n"
+    result += f"🏭 Model: {vehicle_data.get('Model Name', 'N/A')}\n"
+    result += f"📝 Maker: {vehicle_data.get('Maker Model', 'N/A')}\n"
+    result += f"🚦 Class: {vehicle_data.get('Vehicle Class', 'N/A')}\n"
+    result += f"⛽ Fuel: {vehicle_data.get('Fuel Type', 'N/A')}\n"
+    result += f"📅 Reg Date: {vehicle_data.get('Registration Date', 'N/A')}\n"
+    result += f"🏢 RTO: {vehicle_data.get('Registered RTO', 'N/A')}\n"
+    result += f"📍 City: {vehicle_data.get('City Name', 'N/A')}\n"
+    result += f"📞 Phone: {vehicle_data.get('Phone', 'N/A')}\n"
+    result += f"🏥 Insurance: {vehicle_data.get('Insurance Company', 'N/A')}\n"
+    result += f"📅 Insurance Upto: {vehicle_data.get('Insurance Upto', 'N/A')}\n"
     
-    if not vehicle_data:
-        return f"❌ No data found for vehicle: {term.upper()}"
-    
-    result = f"[ 🚗 VEHICLE INFORMATION ]\n\n"
-    result += f"|  🎯 Vehicle No: {term.upper()}\n\n"
-    result += f"|  👤 Owner: {vehicle_data.get('Owner Name', 'N/A')}\n\n"
-    result += f"|  🏭 Model: {vehicle_data.get('Model Name', 'N/A')}\n\n"
-    result += f"|  📝 Maker: {vehicle_data.get('Maker Model', 'N/A')}\n\n"
-    result += f"|  🚦 Class: {vehicle_data.get('Vehicle Class', 'N/A')}\n\n"
-    result += f"|  ⛽ Fuel: {vehicle_data.get('Fuel Type', 'N/A')}\n\n"
-    result += f"|  📅 Reg Date: {vehicle_data.get('Registration Date', 'N/A')}\n\n"
-    result += f"|  🏢 RTO: {vehicle_data.get('Registered RTO', 'N/A')}\n\n"
-    result += f"|  📍 City: {vehicle_data.get('City Name', 'N/A')}\n\n"
-    result += f"|  📞 Phone: {vehicle_data.get('Phone', 'N/A')}\n\n"
-    result += f"|  🏥 Insurance: {vehicle_data.get('Insurance Company', 'N/A')}\n\n"
-    result += f"|  📅 Insurance Upto: {vehicle_data.get('Insurance Upto', 'N/A')}\n\n"
-    result += f"|  🔧 PUC Upto: {vehicle_data.get('PUC Upto', 'N/A')}\n\n"
-    result += f"|  ✅ Fitness Upto: {vehicle_data.get('Fitness Upto', 'N/A')}\n\n"
-    result += f"[  POWERED BY MOD  X  PATEL  ]"
+    result += f"\n⚡ POWERED BY MOD X PATEL"
     return result
 
 def format_tg_result(data, term):
     if data.get("error"):
         return f"❌ Error: {data['error']}"
     
-    result_data = data.get("data", {})
-    tg_result = result_data.get("result", {})
-    
+    tg_result = data.get("data", {}).get("result", {})
     if not tg_result.get("success"):
         return f"❌ No information found for Telegram ID: {term}"
     
-    result = f"[ 📱 TELEGRAM TO NUMBER ]\n\n"
-    result += f"|  🎯 Telegram ID: {term}\n"
-    result += f"|  📞 Mobile: {tg_result.get('number', 'N/A')}\n"
-    result += f"|  🌍 Country: {tg_result.get('country', 'N/A')}\n"
-    result += f"|  📡 Code: {tg_result.get('country_code', 'N/A')}\n"
+    result = f"📱 TG TO NUMBER\n━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Telegram ID: {term}\n"
+    result += f"📞 Mobile: {tg_result.get('number', 'N/A')}\n"
+    result += f"🌍 Country: {tg_result.get('country', 'N/A')}\n"
+    result += f"📡 Code: {tg_result.get('country_code', 'N/A')}\n"
     
-    result += f"\n[  POWERED BY MOD  X  PATEL  ]"
+    result += f"\n⚡ POWERED BY MOD X PATEL"
+    return result
+
+# ============ FULL FORMATTERS ============
+def format_full_number_result(data, number):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    results = []
+    if data.get("data", {}).get("success"):
+        results = data["data"].get("result", {}).get("results", [])
+    
+    if not results:
+        return f"❌ No records found for {number}"
+    
+    total = len(results)
+    result = f"📞 FULL NUMBER DETAILS\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Number: {number}\n"
+    result += f"📊 Total Records: {total}\n"
+    result += f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    
+    for i, rec in enumerate(results[:15], 1):
+        result += f"▶ Record {i}\n"
+        result += f"   👤 Name: {rec.get('NAME', rec.get('name', 'N/A'))}\n"
+        result += f"   👨 Father: {rec.get('fname', 'N/A')}\n"
+        result += f"   🆔 Aadhaar: {rec.get('id', 'N/A')}\n"
+        result += f"   📞 Alt: {rec.get('alt', 'N/A')}\n"
+        result += f"   📡 Carrier: {rec.get('circle', 'N/A')}\n"
+        address = rec.get('ADDRESS', rec.get('address', 'N/A')) or 'N/A'
+        if len(address) > 60:
+            address = address[:57] + '...'
+        result += f"   📍 Address: {address}\n\n"
+    
+    if total > 15:
+        result += f"⚠️ Showing first 15 of {total} records\n"
+    
+    result += f"⚡ POWERED BY MOD X PATEL"
+    return result
+
+def format_full_ration_result(data, term):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    ration_data = data.get("data", {})
+    if not ration_data.get("success"):
+        return f"❌ No records found for Aadhaar: {term}"
+    
+    details = ration_data.get("details", {})
+    card_info = details.get("card_info", {})
+    members = details.get("members", [])
+    monthly_summary = details.get("monthly_summary", [])
+    
+    result = f"🪪 FULL RATION CARD DETAILS\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Aadhaar: {term}\n"
+    result += f"📇 Card ID: {ration_data.get('ration_card_id', 'N/A')}\n"
+    result += f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    
+    result += f"📋 CARD INFO\n"
+    result += f"━━━━━━━━━━━━━━━━━━\n"
+    result += f"Type: {card_info.get('Card Type', 'N/A')}\n"
+    result += f"Scheme: {card_info.get('Scheme', 'N/A')}\n"
+    result += f"Issue Date: {card_info.get('Issue Date', 'N/A')}\n"
+    result += f"District: {card_info.get('District', 'N/A')}\n"
+    result += f"State: {card_info.get('State', 'N/A')}\n"
+    result += f"FPS: {card_info.get('Home FPS', 'N/A')}\n"
+    result += f"Address: {card_info.get('Address', 'N/A')}\n\n"
+    
+    if members:
+        result += f"👥 ALL MEMBERS ({len(members)})\n"
+        result += f"━━━━━━━━━━━━━━━━━━\n"
+        for i, member in enumerate(members, 1):
+            result += f"\n{i}. 👤 {member.get('member_name', 'N/A').upper()}\n"
+            result += f"   Relation: {member.get('relationship', 'N/A')}\n"
+            result += f"   Gender: {member.get('gender', 'N/A')}\n"
+            result += f"   UID: {member.get('uid_masked', 'N/A')}\n"
+            result += f"   Updated: {member.get('cr_last_updated', 'N/A')}\n"
+    
+    if monthly_summary:
+        result += f"\n📆 MONTHLY SUMMARY\n"
+        result += f"━━━━━━━━━━━━━━━━━━\n"
+        for summary in monthly_summary:
+            result += f"• {summary.get('month', 'N/A')}: {summary.get('member_count', 'N/A')} members\n"
+    
+    result += f"\n⚡ POWERED BY MOD X PATEL"
+    return result
+
+def format_full_email_result(data, term):
+    if data.get("error"):
+        return f"❌ Error: {data['error']}"
+    
+    results = []
+    if data.get("data", {}).get("success"):
+        results = data["data"].get("result", {}).get("results", [])
+    
+    if not results:
+        return f"❌ No records found for Email: {term}"
+    
+    total = len(results)
+    result = f"📧 FULL EMAIL DETAILS\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    result += f"🎯 Email: {term}\n"
+    result += f"📊 Total Records: {total}\n"
+    result += f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    
+    for i, rec in enumerate(results[:15], 1):
+        result += f"▶ Record {i}\n"
+        result += f"   👤 Name: {rec.get('NAME', rec.get('name', 'N/A'))}\n"
+        result += f"   📞 Mobile: {rec.get('MOBILE', rec.get('mobile', 'N/A'))}\n"
+        result += f"   📞 Alt: {rec.get('alt', 'N/A')}\n"
+        result += f"   📡 Carrier: {rec.get('circle', 'N/A')}\n"
+        address = rec.get('ADDRESS', rec.get('address', 'N/A')) or 'N/A'
+        if len(address) > 60:
+            address = address[:57] + '...'
+        result += f"   📍 Address: {address}\n\n"
+    
+    if total > 15:
+        result += f"⚠️ Showing first 15 of {total} records\n"
+    
+    result += f"⚡ POWERED BY MOD X PATEL"
     return result
 
 # ============ ADMIN FUNCTIONS ============
@@ -464,14 +542,7 @@ def show_users(chat_id):
     
     msg = "👥 USERS\n\n"
     for i, (cid, data) in enumerate(list(user_data.items())[:20], 1):
-        name = data.get("display_name")
-        if not name or name == "Unknown":
-            name = data.get("first_name")
-            if not name:
-                name = data.get("username")
-            if not name:
-                name = f"User_{cid[-6:]}"
-        
+        name = data.get("display_name", "Unknown")
         searches = len(data.get("searches", []))
         msg += f"{i}. {name}\n   🔍 {searches}\n   🆔 <code>{cid}</code>\n\n"
     send_msg(chat_id, msg)
@@ -480,7 +551,7 @@ def show_all_history(chat_id):
     all_searches = []
     for cid, data in user_data.items():
         for s in data.get("searches", []):
-            name = data.get("display_name", data.get("first_name", "Unknown"))
+            name = data.get("display_name", "Unknown")
             all_searches.append(f"{name}: [{s.get('type', 'Unknown')}] {s.get('term', 'N/A')} - {s.get('time', 'N/A')}")
     
     if all_searches:
@@ -539,10 +610,6 @@ def handle_update(update):
         return
     
     chat_id = msg.get("chat", {}).get("id", 0)
-    
-    if chat_id < 0:
-        return
-    
     text = msg.get("text", "")
     user_info = msg.get("chat", {})
     
@@ -551,22 +618,22 @@ def handle_update(update):
     update_stats(chat_id, user_info)
     admin = is_admin(chat_id)
     
-    # /full command
+    # ============ FULL COMMANDS ============
     if text and text.startswith("/full "):
         query = text.replace("/full ", "").strip()
         
         if query.isdigit() and len(query) == 10:
             update_stats(chat_id, user_info, "FULL_NUMBER", query)
             send_msg(chat_id, f"🔍 Fetching all records for number: {query}...")
-            result = call_number_api(query)
+            result = call_universal_api("NUMBER", query)
             send_msg(chat_id, format_full_number_result(result, query))
             return
         
         elif query.isdigit() and len(query) == 12:
-            update_stats(chat_id, user_info, "FULL_AADHAAR", query)
-            send_msg(chat_id, f"🔍 Fetching all records for Aadhaar: {query}...")
+            update_stats(chat_id, user_info, "FULL_RATION", query)
+            send_msg(chat_id, f"🔍 Fetching full ration card details for: {query}...")
             result = call_universal_api("AADHAAR", query)
-            send_msg(chat_id, format_full_aadhaar_result(result, query))
+            send_msg(chat_id, format_full_ration_result(result, query))
             return
         
         elif '@' in query and '.' in query:
@@ -576,18 +643,11 @@ def handle_update(update):
             send_msg(chat_id, format_full_email_result(result, query))
             return
         
-        elif any(c.isalpha() for c in query) and any(c.isdigit() for c in query):
-            update_stats(chat_id, user_info, "VEHICLE", query)
-            send_msg(chat_id, f"🔍 Fetching vehicle details for: {query.upper()}...")
-            result = call_universal_api("VEHICLE", query)
-            send_msg(chat_id, format_vehicle_result(result, query))
-            return
-        
         else:
-            send_msg(chat_id, "❌ Invalid!\n\nUse:\n/full 9876543210\n/full 123412341234\n/full test@gmail.com\n/full GJ08CJ7132")
+            send_msg(chat_id, "❌ Invalid!\n\nUse:\n/full 9876543210\n/full 123412341234\n/full test@gmail.com")
             return
     
-    # Waiting for input
+    # ============ WAITING FOR INPUT ============
     if str(chat_id) in waiting_for_input:
         stype = waiting_for_input[str(chat_id)]
         del waiting_for_input[str(chat_id)]
@@ -597,11 +657,20 @@ def handle_update(update):
             send_msg(chat_id, f"🔍 Searching {stype}: {text}...")
             
             if stype == "NUMBER":
-                result = call_number_api(text)
+                result = call_universal_api("NUMBER", text)
                 send_msg(chat_id, format_number_result(result, text))
-            elif stype == "AADHAAR":
+            elif stype == "RATION":
                 result = call_universal_api("AADHAAR", text)
-                send_msg(chat_id, format_aadhaar_result(result, text))
+                send_msg(chat_id, format_ration_result(result, text))
+            elif stype == "IP":
+                result = call_universal_api("IP", text)
+                send_msg(chat_id, format_ip_result(result, text))
+            elif stype == "IFSC":
+                result = call_universal_api("IFSC", text)
+                send_msg(chat_id, format_ifsc_result(result, text))
+            elif stype == "GST":
+                result = call_universal_api("GST", text)
+                send_msg(chat_id, format_gst_result(result, text))
             elif stype == "EMAIL":
                 result = call_universal_api("EMAIL", text)
                 send_msg(chat_id, format_email_result(result, text))
@@ -616,7 +685,7 @@ def handle_update(update):
             send_msg(chat_id, "❌ Cancelled!", keyboard)
         return
     
-    # Admin remove mode
+    # ============ ADMIN MODES ============
     if admin and admin_session.get(str(chat_id), {}).get("remove_mode"):
         if text == "/cancel":
             admin_session[str(chat_id)]["remove_mode"] = False
@@ -626,7 +695,6 @@ def handle_update(update):
             admin_session[str(chat_id)]["remove_mode"] = False
         return
     
-    # Admin broadcast mode
     if admin and admin_session.get(str(chat_id), {}).get("broadcast_mode"):
         if text == "/cancel":
             admin_session[str(chat_id)]["broadcast_mode"] = False
@@ -636,7 +704,7 @@ def handle_update(update):
             admin_session[str(chat_id)]["broadcast_mode"] = False
         return
     
-    # Admin commands
+    # ============ ADMIN COMMANDS ============
     if admin:
         if text == "📊 Dashboard":
             show_dashboard(chat_id)
@@ -658,7 +726,7 @@ def handle_update(update):
             send_msg(chat_id, "👋 Logged out!", USER_KEYBOARD)
         return
     
-    # Admin login
+    # ============ ADMIN LOGIN ============
     if text == "/admin":
         send_msg(chat_id, "🔐 Enter admin password:")
         return
@@ -667,32 +735,36 @@ def handle_update(update):
         send_msg(chat_id, "✅ Admin access granted!", ADMIN_KEYBOARD)
         return
     
-    # ============ /start COMMAND (EXACTLY AS YOU WANTED) ============
+    # ============ /start COMMAND ============
     if text == "/start":
         welcome = f"🎉 WELCOME! 🎉\n\n"
         welcome += f"📱 <b>MULTI INFO BOT</b>\n\n"
         welcome += f"✨ <b>Features:</b>\n"
         welcome += f"• 📞 Number Lookup - Get mobile details\n"
-        welcome += f"• 🆔 Aadhaar Lookup - Get Aadhaar info\n"
+        welcome += f"• 🪪 Ration Card - Get ration card info from Aadhaar\n"
         welcome += f"• 📧 Email Lookup - Get email details\n"
         welcome += f"• 🚗 Vehicle Lookup - Get vehicle information\n"
+        welcome += f"• 🌐 IP Lookup - Get IP geolocation\n"
+        welcome += f"• 🏦 IFSC Lookup - Get bank branch details\n"
+        welcome += f"• 📦 GST Lookup - Get GST information\n"
         welcome += f"• 📱 TG to Number - Get mobile from Telegram ID\n\n"
         welcome += f"Send any 10-digit number directly!"
         send_msg(chat_id, welcome, USER_KEYBOARD)
         return
     
+    # ============ BUTTON HANDLERS ============
     if text == "📞 Number Lookup":
         send_msg(chat_id, "📞 Send 10-digit number:\nExample: 9876543210\n\nType /cancel")
         waiting_for_input[str(chat_id)] = "NUMBER"
         return
     
-    if text == "🆔 Aadhaar Lookup":
-        send_msg(chat_id, "🆔 Send 12-digit Aadhaar:\nExample: 123412341234\n\nType /cancel")
-        waiting_for_input[str(chat_id)] = "AADHAAR"
+    if text == "🪪 Ration Card":
+        send_msg(chat_id, "🪪 Send 12-digit Aadhaar number:\nExample: 123412341234\n\nThis will fetch Ration Card details\n\nType /cancel")
+        waiting_for_input[str(chat_id)] = "RATION"
         return
     
     if text == "📧 Email Lookup":
-        send_msg(chat_id, "📧 Send email:\nExample: test@gmail.com\n\nType /cancel")
+        send_msg(chat_id, "📧 Send email address:\nExample: test@gmail.com\n\nType /cancel")
         waiting_for_input[str(chat_id)] = "EMAIL"
         return
     
@@ -701,36 +773,43 @@ def handle_update(update):
         waiting_for_input[str(chat_id)] = "VEHICLE"
         return
     
+    if text == "🌐 IP Lookup":
+        send_msg(chat_id, "🌐 Send IP address:\nExample: 8.8.8.8\n\nType /cancel")
+        waiting_for_input[str(chat_id)] = "IP"
+        return
+    
+    if text == "🏦 IFSC Lookup":
+        send_msg(chat_id, "🏦 Send IFSC code:\nExample: SBIN0000001\n\nType /cancel")
+        waiting_for_input[str(chat_id)] = "IFSC"
+        return
+    
+    if text == "📦 GST Lookup":
+        send_msg(chat_id, "📦 Send GST number:\nExample: 10DJCPK4351Q1Z5\n\nType /cancel")
+        waiting_for_input[str(chat_id)] = "GST"
+        return
+    
     if text == "📱 TG to Number":
-        send_msg(chat_id, "📱 Send Telegram ID:\nExample: 8490678882\n\nType /cancel")
+        send_msg(chat_id, "📱 Send Telegram ID (number):\nExample: 8490678882\n\nType /cancel")
         waiting_for_input[str(chat_id)] = "TGNUMBER"
         return
     
     if text == "ℹ️ Help":
         help_msg = f"📚 HELP & COMMANDS\n\n"
         help_msg += f"🔍 <b>Available Lookups:</b>\n\n"
-        help_msg += f"📞 <b>Number Lookup</b>\n"
-        help_msg += f"   Send 10-digit number\n"
-        help_msg += f"   Use /full 9876543210 for all records\n\n"
-        help_msg += f"🆔 <b>Aadhaar Lookup</b>\n"
-        help_msg += f"   Send 12-digit Aadhaar\n"
-        help_msg += f"   Use /full 123412341234 for all records\n\n"
-        help_msg += f"📧 <b>Email Lookup</b>\n"
-        help_msg += f"   Send email address\n"
-        help_msg += f"   Use /full test@gmail.com for all records\n\n"
-        help_msg += f"🚗 <b>Vehicle Lookup</b>\n"
-        help_msg += f"   Send vehicle number\n\n"
-        help_msg += f"📱 <b>TG to Number</b>\n"
-        help_msg += f"   Send Telegram ID\n\n"
-        help_msg += f"📋 <b>Commands:</b>\n"
-        help_msg += f"   /start - Restart bot\n"
-        help_msg += f"   /help - Show this help\n"
-        help_msg += f"   /full [query] - Show all records\n\n"
+        help_msg += f"📞 <b>Number Lookup</b>\n   Send 10-digit number\n   /full 9876543210\n\n"
+        help_msg += f"🪪 <b>Ration Card</b>\n   Send 12-digit Aadhaar\n   /full 123412341234\n\n"
+        help_msg += f"📧 <b>Email Lookup</b>\n   Send email address\n   /full test@gmail.com\n\n"
+        help_msg += f"🚗 <b>Vehicle Lookup</b>\n   Send vehicle number\n\n"
+        help_msg += f"🌐 <b>IP Lookup</b>\n   Send IP address\n\n"
+        help_msg += f"🏦 <b>IFSC Lookup</b>\n   Send IFSC code\n\n"
+        help_msg += f"📦 <b>GST Lookup</b>\n   Send GST number\n\n"
+        help_msg += f"📱 <b>TG to Number</b>\n   Send Telegram ID\n\n"
+        help_msg += f"📋 <b>Commands:</b>\n   /start - Restart bot\n   /help - Show help\n   /full [query] - All records\n\n"
         help_msg += f"👨‍💻 <b>Developer:</b> {DEVELOPER_USERNAME}"
         send_msg(chat_id, help_msg, USER_KEYBOARD)
         return
     
-    # Direct number (10 digits)
+    # ============ DIRECT 10-DIGIT NUMBER ============
     if text and text.isdigit() and len(text) == 10:
         waiting_for_input[str(chat_id)] = "NUMBER"
         handle_update(update)
@@ -740,7 +819,7 @@ def handle_update(update):
         send_msg(chat_id, "❌ Nothing to cancel!", USER_KEYBOARD)
         return
     
-    if text:
+    if text and not text.startswith("/"):
         send_msg(chat_id, "❌ Invalid! Use buttons or send 10-digit number", USER_KEYBOARD)
 
 # ============ MAIN ============
